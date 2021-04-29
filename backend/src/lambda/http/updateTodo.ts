@@ -4,12 +4,9 @@ import { APIGatewayProxyEvent, APIGatewayProxyHandler, APIGatewayProxyResult } f
 
 import { UpdateTodoRequest } from '../../requests/UpdateTodoRequest'
 
-import * as AWS from 'aws-sdk';
 import { getUserId } from '../utils';
 
-const docClient = new AWS.DynamoDB.DocumentClient()
-const todosTable = process.env.TODOS_TABLE
-const indexName = process.env.INDEX_NAME
+import { updateTodo } from '../../businessLogic/todos';
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const todoId = event.pathParameters.todoId
@@ -18,41 +15,17 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
 
   // TODO: Update a TODO item with the provided id using values in the "updatedTodo" object
 
-  const result = await docClient.query({
-    TableName: todosTable,
-    IndexName: indexName,
-    KeyConditionExpression: 'userId = :userId',
-    ExpressionAttributeValues: {
-      ':userId': userId
-    }
-  }).promise()
+  const result = await updateTodo(userId, todoId, updatedTodo);
 
-  if(result.Count !== 0){
-    const result = await docClient.update({
-      TableName: todosTable,
-      Key: {
-        userId: userId,
-        todoId: todoId
-      },
-      ExpressionAttributeValues:{
-        ':name': updatedTodo.name,
-        ':dueDate': updatedTodo.dueDate,
-        ':done': updatedTodo.done
-      },
-      UpdateExpression: 'SET name = :name, dueDate = :dueDate, done = :done',
-      ReturnValues: 'ALL_NEW'
-    }).promise();
-
-    const attributes = result.Attributes;
-
+  if(result){
     return {
       statusCode: 204,
       body: JSON.stringify({
-        attributes
+        result
       })
     };
   }
-
+  
   return {
     statusCode: 404,
     headers: {
