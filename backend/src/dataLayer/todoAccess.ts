@@ -2,10 +2,13 @@ import * as AWS from 'aws-sdk'
 import { DocumentClient } from 'aws-sdk/clients/dynamodb'
 import {TodoItem} from '../models/TodoItem';
 import { UpdateTodoRequest } from '../requests/UpdateTodoRequest';
+import { createLogger } from '../utils/logger';
 
 const s3 = new AWS.S3({
   signatureVersion: 'v4'
 })
+
+const logger = createLogger('todoAccess');
 
 export class TodoAccess {
     constructor(
@@ -17,6 +20,8 @@ export class TodoAccess {
     ){}
 
       async getUserTodos(userId: string): Promise<TodoItem[]> {
+        logger.info('Getting all users todos');
+
         const result = await this.docClient.query({
             TableName: this.todosTable,
             KeyConditionExpression: 'userId = :userId',
@@ -27,11 +32,13 @@ export class TodoAccess {
           }).promise()
 
           const todos = result.Items;
+          logger.info('Todos retrieved: ', {todos: todos} )
 
           return todos as TodoItem[]
       }
 
       async createTodo(newItem: TodoItem): Promise<TodoItem> {
+        logger.info("Creating todo item: ", {newItem: newItem});
         await this.docClient.put({
           TableName: this.todosTable,
           Item: newItem
@@ -41,6 +48,7 @@ export class TodoAccess {
       }
 
       async updateTodo(userId: string, todoId: string, updatedTodo: UpdateTodoRequest): Promise<TodoItem>{
+        logger.info("Updating todo Item: " + {todoId: todoId})
         const result = await this.docClient.query({
             TableName: this.todosTable,
             IndexName: this.indexName,
@@ -51,6 +59,8 @@ export class TodoAccess {
           }).promise()
         
           if(result.Count !== 0){
+            logger.info('User id validated');
+
             const result = await this.docClient.update({
               TableName: this.todosTable,
               Key: {
@@ -70,12 +80,18 @@ export class TodoAccess {
             }).promise();
         
             const attributes = result.Attributes;
+            logger.info('Todo item has been updated: ', {updatedTodo: attributes});
+
             return attributes as TodoItem;
         }
+        logger.info('User could not be validated: ' + {userId: userId});
         return null;
       }
 
     async deleteTodo(userId: string, todoId: string) {
+      logger.info('Deleting todo item: ' + {todoId: todoId})
+
+      try{
         await this.docClient.delete({
           TableName: this.todosTable,
           Key: {
@@ -83,9 +99,13 @@ export class TodoAccess {
             todoId: todoId
           }
         }).promise()
+      }catch(e){
+        logger.info('Could not delete item: ', {error: e.message})
+      }
     }
 
     async getUploadURL(imageId: string): Promise<string>{
+      logger.info('Getting upload url: ', {imageId: imageId});
       return s3.getSignedUrl('putObject', {
         Bucket: this.bucketName,
         Key: imageId,
@@ -95,7 +115,9 @@ export class TodoAccess {
 
     async updateUploadURL(userId: string, todoId: string): Promise<TodoItem>{
       const attachmentUrl = `https://${this.bucketName}.s3.amazonaws.com/${todoId}`
+      logger.info('Attachment URL created: ', {url: attachmentUrl});
 
+      logger.info('Updating todo attachment URL')
       const result = await this.docClient.update({
         TableName: this.todosTable,
         Key: {
@@ -108,6 +130,8 @@ export class TodoAccess {
         UpdateExpression: 'SET attachmentUrl = :attachmentUrl',
         ReturnValues: 'UPDATED_NEW'
       }).promise()
+
+      logger.info('URL attached: ', {result: result.Attributes});
 
       return result.Attributes as TodoItem;
     }

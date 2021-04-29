@@ -4,14 +4,21 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult, APIGatewayProxyHandler } f
 
 import {getUserId} from '../utils';
 import { deleteTodo } from '../../businessLogic/todos';
+import { createLogger } from '../../utils/logger';
+
+const logger = createLogger('deleteTodo');
 
 export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const todoId = event.pathParameters.todoId
 
   // TODO: Remove a TODO item by id
   const userId = getUserId(event)
+  
+  logger.info('Getting userId: ', {userId: userId});
+
   try{
     await deleteTodo(userId, todoId);
+    logger.info('User was deleted');
   
     return {
       statusCode: 200,
@@ -21,6 +28,8 @@ export const handler: APIGatewayProxyHandler = async (event: APIGatewayProxyEven
       body: ''
     }
   } catch (e){
+    logger.info('User not deleted: ', { error: e.message });
+    
     return {
       statusCode: 400,
       headers: {
