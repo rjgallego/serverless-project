@@ -3,8 +3,8 @@ service:
 
 plugins:
   - serverless-webpack
+  - serverless-reqvalidator-plugin
   - serverless-iam-roles-per-function
-
 provider:
   name: aws
   runtime: nodejs12.x
@@ -17,25 +17,18 @@ provider:
     INDEX_NAME: TodoIdIndex
     ATTACH_S3_BUCKET: serverless-todo-attachment-${self:provider.stage}
     SIGNED_URL_EXPIRATION: 3000
-    
-  iamRoleStatements:
-    - Effect: Allow
-      Action: 
-        - dynamodb:Query
-        - dynamodb:PutItem
-        - dynamodb:GetItem
-        - dynamodb:UpdateItem
-        - dynamodb:DeleteItem
-      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
-    - Effect: Allow
-      Action:
-        - dynamodb:Query
-      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}/index/${self:provider.environment.INDEX_NAME}
-    - Effect: Allow
-      Action:
-        - s3:PutObject
-        - s3:GetObject
-      Resource: arn:aws:s3:::${self:provider.environment.ATTACH_S3_BUCKET}/*
+
+custom:
+  documentation:
+    api:
+      info:
+        version: v1.0.0
+        title: Todo API
+        description: Serverless application for managing todo list
+    models:
+      - name: TodoRequest
+        contentType: application/json
+        schema: ${file(models/create-todo-request.json)}
 
 functions:
 
@@ -51,6 +44,12 @@ functions:
           path: todos
           cors: true
           authorizer: Auth
+    iamRoleStatementsName: Query-Todo-Table
+    iamRoleStatements:
+    - Effect: Allow
+      Action: 
+        - dynamodb:Query
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
 
   # TODO: Configure this function
   CreateTodo:
@@ -61,6 +60,18 @@ functions:
           path: todos
           cors: true
           authorizer: Auth
+          reqValidatorName: RequestBodyValidator
+          documentation:
+            summary: Create Todo item
+            description: Create a new Todo item and add to database
+            requestModels:
+              'application/json': TodoRequest
+    iamRoleStatementsName: Put-Item-Todo-Table
+    iamRoleStatements:
+    - Effect: Allow
+      Action: 
+        - dynamodb:PutItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
 
   # TODO: Configure this function
   UpdateTodo:
@@ -71,6 +82,16 @@ functions:
           path: todos/{todoId}
           authorizer: Auth
           cors: true
+    iamRoleStatementsName: Query-Index-Update-Todo-Table
+    iamRoleStatements:
+    - Effect: Allow
+      Action: 
+        - dynamodb:UpdateItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE} 
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}/index/${self:provider.environment.INDEX_NAME}  
 
   # TODO: Configure this function
   DeleteTodo:
@@ -81,6 +102,13 @@ functions:
           path: todos/{todoId}
           authorizer: Auth
           cors: true
+    iamRoleStatementsName: Delete-Item-Todo-Table
+    iamRoleStatements:
+    - Effect: Allow
+      Action: 
+        - dynamodb:DeleteItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
+
 
   # TODO: Configure this function
   GenerateUploadUrl:
@@ -91,6 +119,17 @@ functions:
           path: todos/{todoId}/attachment
           authorizer: Auth
           cors: true
+    iamRoleStatementsName: Get-Put-S3-Add-URL-Todo-Table
+    iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+        - s3:GetObject
+      Resource: arn:aws:s3:::${self:provider.environment.ATTACH_S3_BUCKET}/*
+    - Effect: Allow
+      Action:
+        - dynamodb:UpdateItem
+      Resource: arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.TODOS_TABLE}
 
 resources:
   Resources:
@@ -167,3 +206,12 @@ resources:
                - s3:PutObject
              Resource: 'arn:aws:s3:::${self:provider.environment.ATTACH_S3_BUCKET}/*'
         Bucket: !Ref AttachmentsBucket
+    
+    RequestBodyValidator:
+      Type: AWS::ApiGateway::RequestValidator
+      Properties:
+        Name: 'request-body-validator'
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ValidateRequestBody: true
+        ValidateRequestParameters: false
