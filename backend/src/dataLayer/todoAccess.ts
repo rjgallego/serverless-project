@@ -4,15 +4,19 @@ import {TodoItem} from '../models/TodoItem';
 import { UpdateTodoRequest } from '../requests/UpdateTodoRequest';
 import { createLogger } from '../utils/logger';
 
+const AWSXRay = require('aws-xray-sdk')
+
 const s3 = new AWS.S3({
   signatureVersion: 'v4'
 })
 
 const logger = createLogger('todoAccess');
 
+const XAWS = AWSXRay.captureAWS(AWS);
+
 export class TodoAccess {
     constructor(
-        private readonly docClient: DocumentClient = new AWS.DynamoDB.DocumentClient(),
+        private readonly docClient: DocumentClient = new XAWS.DynamoDB.DocumentClient(),
         private readonly todosTable = process.env.TODOS_TABLE,
         private readonly indexName = process.env.INDEX_NAME,
         private readonly bucketName = process.env.ATTACH_S3_BUCKET,
